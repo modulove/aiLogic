@@ -19,16 +19,13 @@ int newPosition = -999;
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define SSD1306_NO_SPLASH
-
 const int LSB_threshold = 511;
 const int A6_pin = A6;
 const int A7_pin = A7;
-const int A1_pin = A1; // New CV input on Analog Pin 1
 const int D9_pin = 9;
 const int D10_pin = 10;
 const int D3_pin = 3;
 const int D11_pin = 11;
-
 int valueA6 = 0;
 int outA6 = 0;
 int valueA7 = 0;
@@ -39,39 +36,57 @@ int OR = 0;
 int NOR = 0;
 int XOR = 0;
 int XNOR = 0;
-int EXOR = 0;
-int NEXOR = 0;
 int high = 0;
 int low = 0;
+int D10 = 10;
+int D9 = 9;
+int D11 = 11;
+int D3 = 3;
+const int A6Pin = 6;
+const int A7Pin = 7;
+const int D3Pin = 3;
+const int D9Pin = 9;
+const int D10Pin = 10;
+const int D11Pin = 11;
+const int pinD9 = 9;
+const int pinD10 = 10;
+const int pinD3 = 3;
+const int pinD11 = 11;
+const int D9pin = 9;
+const int D10pin = 10;
+const int D3pin = 3;
+const int D11pin = 11;
 const int LSB_resolution = 256;
 int A7Value = 0;
 int A6Value = 0;
-int A1Value = 0; // New for CV input on Analog Pin 1
 int A7LastValue = 0;
 int A6LastValue = 0;
-int A1LastValue = 0; //  CV input Analog Pin 1
 int button = 7;
 int mode = 0;
-int subMode = 0; // Sub-mode for the "logMODE"
 int previousButtonState = HIGH;
 unsigned long debounceTime = 0;
 const int debounceDelay = 150;
-int cvValue = 0;
-
-const char subModes[] = {'A', 'O', 'X', 'E'}; // First letter of the logic modes for sub-mode display
 
 void setup() {
-  Serial.begin(57600);
-  // Fast PWM setting
-  TCCR1B &= B11111000; // Hand coding
-  TCCR1B |= B00000001; // Hand coding
+    Serial.begin(57600);
+ //fast pwm setting
+ TCCR1B &= B11111000;
+ TCCR1B |= B00000001;
 
+/*
+ // Initialize the OLED display with the I2C address (you may need to adjust this address based on your OLED module)
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    // If the OLED is not detected, print an error message and stop the program
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;);
+  }
+  */
+  
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-
+  
   // Clear the display buffer and update the display
   display.clearDisplay();
   display.display();
-
   pinMode(button, INPUT_PULLUP);
   pinMode(A6_pin, INPUT);
   pinMode(A7_pin, INPUT);
@@ -79,133 +94,169 @@ void setup() {
   pinMode(D10_pin, OUTPUT);
   pinMode(D3_pin, OUTPUT);
   pinMode(D11_pin, OUTPUT);
-  pinMode(4, INPUT_PULLUP); // Encoder A?
-  pinMode(2, INPUT_PULLUP); // Encoder B?
-  pinMode(A1, INPUT); // Analog Pin 1 as input for the control voltage
+  pinMode(4, INPUT_PULLUP); //ENCODER A?
+  pinMode(2, INPUT_PULLUP); //ENCODER B?
+
 }
 
 void loop() {
-  // Clear the display buffer
+
+    // Clear the display buffer
   display.clearDisplay();
 
   // Set text size and color
-  display.setTextSize(1);        // Text size 1, smaller text
+  display.setTextSize(2);      // Text size 1, smaller text
   display.setTextColor(SSD1306_WHITE); // White text color
 
   // Print the mode on the OLED display
   display.setCursor(8, 10); // Set the cursor to the top-left corner
-
+  
   int buttonState = digitalRead(button);
   if (buttonState == LOW && previousButtonState == HIGH) {
     if (millis() - debounceTime > debounceDelay) {
-      mode = (mode + 1) % 2; // Two main modes: 0 - logMODE, 1 - CV MODE
-      subMode = 0; // Reset sub-mode when changing the main mode
+      mode = (mode + 1) % 6;
       debounceTime = millis();
+
     }
   }
-
-  // If in the logMODE, use the encoder to switch sub-modes
-  if (mode == 0) {
-    newPosition = myEnc.read();
-    subMode = (newPosition + 4) % 4; // Use encoder to rotate between sub-modes (A, O, X, E)
-  }
-
   previousButtonState = buttonState;
 
-  // Read the CV input on Analog Pin 1
-  A1Value = analogRead(A1_pin);
-
-  // If there's CV input, use the encoder as an attenuator for the CV input
-  if (A1Value >= 100) {
-    newPosition = myEnc.read();
-    int attenuatedValue = map(newPosition, 0, 255, 0, A1Value);
-    A1Value = attenuatedValue;
-  }
-
   switch (mode) {
-    case 0://logMODE
-      // Sub-mode title
-      display.println(F("logMDE"));
+    case 0://AND
+      digitalWrite(14, HIGH);//hand coding
+      digitalWrite(19, LOW);//hand coding
+      valueA6 = analogRead(A6_pin);
+      outA6 = (valueA6 >= LSB_threshold) ? HIGH : LOW;
+      valueA7 = analogRead(A7_pin);
+      outA7 = (valueA7 >= LSB_threshold) ? HIGH : LOW;
+      AND = outA6 & outA7;
+      NAND = !(outA6 & outA7);
 
-      // Display the sub-mode as a square with the first letter of the logic mode
-      display.drawRect(50 + subMode * 18, 20, 16, 16, SSD1306_WHITE);
-      display.setCursor(55 + subMode * 18, 22);
-      display.print(subModes[subMode]);
-
-      // Switch between sub-modes with a single button press
-      if (buttonState == LOW && previousButtonState == HIGH) {
-        subMode = (subMode + 1) % 4;
-      }
-
-      // Update the logic modes based on the current sub-mode
-      switch (subMode) {
-        case 0: // AND/NAND
-          valueA6 = analogRead(A6_pin);
-          outA6 = (valueA6 >= LSB_threshold) ? HIGH : LOW;
-          valueA7 = analogRead(A7_pin);
-          outA7 = (valueA7 >= LSB_threshold) ? HIGH : LOW;
-          AND = outA6 & outA7;
-          NAND = !(outA6 & outA7);
-
-          digitalWrite(D9_pin, AND);
-          digitalWrite(D10_pin, NAND);
-          digitalWrite(D3_pin, outA6);
-          digitalWrite(D11_pin, outA7);
-          Serial.println("AND | NAND");
-          break;
-
-        case 1: // OR/XOR
-          valueA6 = analogRead(A6_pin);
-          outA6 = (valueA6 >= LSB_threshold) ? HIGH : LOW;
-          valueA7 = analogRead(A7_pin);
-          outA7 = (valueA7 >= LSB_threshold) ? HIGH : LOW;
-          OR = outA6 | outA7;
-          NOR = !(outA6 | outA7);
-          digitalWrite(D9_pin, OR);
-          digitalWrite(D10_pin, NOR);
-          digitalWrite(D3_pin, outA6);
-          digitalWrite(D11_pin, outA7);
-          Serial.println("OR | XOR");
-          break;
-
-        case 2: // XOR/XNOR
-          outA6 = (analogRead(A6_pin) >= LSB_threshold) ? HIGH : LOW;
-          outA7 = (analogRead(A7_pin) >= LSB_threshold) ? HIGH : LOW;
-          XOR = outA6 ^ outA7;
-          XNOR = !(outA6 ^ outA7);
-          digitalWrite(D9_pin, XOR);
-          digitalWrite(D10_pin, XNOR);
-          digitalWrite(D3_pin, outA6);
-          digitalWrite(D11_pin, outA7);
-          Serial.println("XOR | XNOR");
-          break;
-
-        case 3: // EXNOR/NEXOR
-          outA6 = (analogRead(A6_pin) >= LSB_threshold) ? HIGH : LOW;
-          outA7 = (analogRead(A7_pin) >= LSB_threshold) ? HIGH : LOW;
-          EXOR = outA6 ^ !outA7;      // EXOR = A6 XOR (NOT A7)
-          NEXOR = !(outA6 ^ !outA7);  // NEXOR = NOT (A6 XOR (NOT A7))
-          digitalWrite(D9_pin, EXOR);
-          digitalWrite(D10_pin, NEXOR);
-          digitalWrite(D3_pin, outA6);
-          digitalWrite(D11_pin, outA7);
-          Serial.println("EXOR|NEXOR");
-          break;
-      }
+      digitalWrite(D9_pin, AND);
+      digitalWrite(D10_pin, NAND);
+      digitalWrite(D3_pin, outA6);
+      digitalWrite(D11_pin, outA7);
+      display.println(F("AND | NAND"));
+      Serial.println("AND | NAND");
       break;
 
-    case 1: // CV MODE
-      display.println(F("CV MODE"));
+    case 1://OR
+      digitalWrite(15, HIGH);//hand coding
+      digitalWrite(14, LOW);//hand coding
+      valueA6 = analogRead(A6);
+      outA6 = (valueA6 >= LSB_threshold) ? HIGH : LOW;
 
-      // Display the CV input as a bar graph
-      display.fillRect(8, 20, A1Value / 8, 6, SSD1306_WHITE); // Scale the bar graph to fit the OLED screen
+      valueA7 = analogRead(A7);
+      outA7 = (valueA7 >= LSB_threshold) ? HIGH : LOW;
+
+      OR = outA6 | outA7;
+      digitalWrite(D9Pin, OR);
+
+      NOR = !(outA6 | outA7);
+      digitalWrite(D10Pin, NOR);
+
+      digitalWrite(D3Pin, outA6);
+      digitalWrite(D11Pin, outA7);
+      display.println(F("OR | XOR"));
       break;
+
+    case 2://XOR
+      digitalWrite(16, HIGH);//hand coding
+      digitalWrite(15, LOW);//hand coding
+
+      outA6 = (analogRead(6) >= LSB_threshold) ? HIGH : LOW;
+      outA7 = (analogRead(7) >= LSB_threshold) ? HIGH : LOW;
+
+      XOR = outA6 ^ outA7;
+      XNOR = !(outA6 ^ outA7);
+
+      digitalWrite(9, XOR);
+      digitalWrite(10, XNOR);
+
+      digitalWrite(3, outA6);
+      digitalWrite(11, outA7);
+      display.println(F("XOR | XNOR"));
+      break;
+
+    case 3://compare
+      digitalWrite(17, HIGH);//hand coding
+      digitalWrite(16, LOW);//hand coding
+
+      outA6 = analogRead(6);
+      outA7 = analogRead(7);
+
+      if (outA6 > outA7) {
+        digitalWrite(pinD9, HIGH);
+        digitalWrite(pinD10, LOW);
+      } else if (outA6 < outA7) {
+        digitalWrite(pinD9, LOW);
+        digitalWrite(pinD10, HIGH);
+      }
+
+      outA6 = map(outA6, 0, 1023, 0, 256);
+      outA7 = map(outA7, 0, 1023, 0, 256);
+
+      analogWrite(pinD3, outA6);
+      analogWrite(pinD11, outA7);
+      display.println(F("COMPARE"));
+      break;
+
+    case 4://min max
+      digitalWrite(18, HIGH);//hand coding
+      digitalWrite(17, LOW);//hand coding
+
+      outA6 = analogRead(6);
+      outA7 = analogRead(7);
+
+      high = max(outA6, outA7);
+      low = min(outA6, outA7);
+
+      analogWrite(D9pin, map(high, 0, 1023, 0, LSB_resolution - 1));
+      analogWrite(D10pin, map(low, 0, 1023, 0, LSB_resolution - 1));
+      analogWrite(D3pin, map(outA6, 0, 1023, 0, LSB_resolution - 1));
+      analogWrite(D11pin, map(outA7, 0, 1023, 0, LSB_resolution - 1));
+      display.println(F("MIN - MAX"));
+      break;
+
+    case 5:
+      digitalWrite(19, HIGH);//hand coding
+      digitalWrite(18, LOW);//hand coding
+
+      A7Value = analogRead(7);
+      A6Value = analogRead(6);
+
+      if (A7Value >= 511) {
+        A7Value = HIGH;
+      } else {
+        A7Value = LOW;
+      }
+
+      if (A6Value >= 511) {
+        A6Value = HIGH;
+      } else {
+        A6Value = LOW;
+      }
+
+      if (A7Value != A7LastValue && A7Value == HIGH) {
+        digitalWrite(D10, !digitalRead(D10));
+      }
+      if (A6Value != A6LastValue && A6Value == HIGH) {
+        digitalWrite(D9, !digitalRead(D9));
+      }
+
+      digitalWrite(D11, A7Value);
+      digitalWrite(D3, A6Value);
+
+      A7LastValue = A7Value;
+      A6LastValue = A6Value;
+      display.println(F("TOGGLE"));
   }
-
   // Update the display
   display.display();
 
-  // Add other debug information as needed
+
+/*
+   // Add other debug information as needed
   Serial.print("ValueA6: ");
   Serial.println(valueA6);
   Serial.print("ValueA7: ");
@@ -215,5 +266,6 @@ void loop() {
   Serial.print("OutA7: ");
   Serial.println(outA7);
 
-  delay(50);
+  */
+  
 }
